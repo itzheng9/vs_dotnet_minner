@@ -1,0 +1,231 @@
+/*
+ *   Minner1.0      winform教学示例  
+ *   2010-12-16  by  Mr.Zheng@Guoli
+ *   todo :左右键双击开雷区
+ */
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Drawing;
+using System.Linq;
+using System.Text;
+using System.Windows.Forms;
+
+ 
+namespace Minner
+{
+
+    public partial class Form1 : Form
+    {
+        //业务数据定义
+        const int  ZoneWidht = 22;
+        const int  ZoneHeight = 13;
+        const int  MinnerCount = 50;//雷总数
+
+        Minner[,]  mZone;//雷区数组
+        int flagedCnt,openedCnt;        
+        
+
+        //界面数据定义
+        const int MinnerSize = 22;
+
+        public Form1()
+        {
+            InitializeComponent();
+            mZone = new Minner[ZoneWidht, ZoneHeight];
+
+        }
+
+        //返回不同状态雷的背影图
+        public Image getImage(int i) {
+            if (i >= 0 && i < imageList1.Images.Count)
+                return imageList1.Images[i];
+            else return null;
+        }
+
+        private void button1_Click(object sender, EventArgs e)
+        {            
+            resetGame();
+        }
+
+
+        //new 一个雷
+        private Minner newMinner(int x, int y)
+        {
+            Minner b = new Minner(x, y);
+            b.Left = x * MinnerSize + x;
+            b.Top = y * MinnerSize + y;
+            b.Width = MinnerSize;
+            b.Height = MinnerSize;
+
+            b.Click += new EventHandler(this.ClickMinner);
+            b.MouseUp += new MouseEventHandler(OnMouseUp);
+
+            panel1.Controls.Add(b);
+
+            return b;
+        }
+
+        //初始化
+        public void resetGame()
+        {
+            flagedCnt = 0;
+            openedCnt = 0;
+            panel1.Controls.Clear();
+            panel1.Enabled = true;
+            for (int i = 0; i < ZoneWidht; i++)
+            {
+                for (int j = 0; j < ZoneHeight; j++)
+                {
+                    mZone[i, j] = newMinner(i, j);
+                }
+            }
+
+            //随机布雷
+            int a = 0, x, y;
+            Random r = new Random((int)DateTime.Now.Ticks);
+            while (a < MinnerCount)
+            {
+                x = r.Next(ZoneWidht);
+
+                y = r.Next(ZoneHeight);
+
+                if (!mZone[x, y].IsMinner)
+                {
+                    a++;
+                    mZone[x, y].IsMinner = true;
+
+                }
+            }
+
+        }
+
+
+        //打开某雷区的判断4.8  286
+        private void openZone(int x, int y)
+        {
+            if (!mZone[x, y].IsMinner && mZone[x, y].Ms== MinnerStatus.Idle      )
+            {
+                
+                openMinner(x, y);
+                openedCnt++;
+                if (getNearby(x,y) > 0)
+                    return;
+
+                //这个探雷区的规则不知道是否和ms的扫雷一样....
+                for (int i = x <= 0 ? 0 : x - 1; i <= (x >= ZoneWidht - 1 ? ZoneWidht - 1 : x + 1); i++)
+                    for (int j = y <= 0 ? 0 : y - 1; j <= (y >= ZoneHeight - 1 ? ZoneHeight - 1 : y + 1); j++)
+                    {
+                        if (!mZone[i, j].IsMinner)
+                            openZone(i,j);
+                    }                
+                     
+            }
+        }
+
+        //计算周围9宫格雷数目
+        private int getNearby(int x,int y) {
+            int cnt = 0;
+            
+            for(int i=  x<=0?0:x-1;i<= (x>=ZoneWidht-1?ZoneWidht-1:x+1);i++)
+                for (int j= y<=0?0:y-1;j<= (y>=ZoneHeight-1?ZoneHeight-1:y+1);j++){
+                    if(mZone[i,j].IsMinner)
+                        cnt++;
+                }
+
+            return cnt;
+        }
+        
+        //打开雷
+        private void openMinner(int x,int y) {
+            Minner m = mZone[x, y];
+            m.Enabled = false;
+            m.FlatStyle = FlatStyle.Flat;
+            m.BackColor = Color.White;
+            m.Ms = MinnerStatus.Opened;
+            if (getNearby(m.X, m.Y) > 0)
+                m.Text = "" + getNearby(m.X, m.Y); 
+        }
+
+        //点雷的响应代码
+        private void ClickMinner(object sender, EventArgs e)
+        {
+            Minner m = sender as Minner;
+
+            if(m.Ms== MinnerStatus.Idle)
+            {                
+                m.Enabled = false;
+                if (m.IsMinner)                
+                    gameOver(m.X, m.Y);                
+                else                 
+                    openZone(m.X,m.Y);                
+            }
+            showCount();
+        }
+
+
+       //右键点雷的响应
+        private void OnMouseUp(Object sender,MouseEventArgs e)
+        {
+            Minner m = sender as Minner;
+            if (e.Button == MouseButtons.Right)
+            {
+                switch (m.Ms)
+                {
+                    case MinnerStatus.Idle:
+                        m.Ms = MinnerStatus.Flaged;
+                        flagedCnt++;
+                        m.Image = Program.f.getImage(0); 
+                        break;
+                    case MinnerStatus.Flaged:
+                        m.Ms = MinnerStatus.Asked;
+                        flagedCnt--;
+                        m.Image = Program.f.getImage(1); 
+                        break;
+                    case MinnerStatus.Asked:
+                        m.Ms = MinnerStatus.Idle;
+                        flagedCnt--;
+                        m.Image = null; 
+                        break;
+                }
+            }
+            showCount();
+        }
+
+        //显示数目
+        private void showCount() {
+            label1.Text = "打开区域：" + openedCnt + ",剩余雷：" + (MinnerCount-flagedCnt);
+        }     
+
+        
+        private void gameOver(int x, int y)
+        {
+            panel1.Enabled = false;
+
+            for (int i = 0; i < ZoneWidht; i++)
+            {
+                for (int j = 0; j < ZoneHeight; j++)
+                {
+                    if (mZone[i, j] != null && mZone[i, j].Ms == MinnerStatus.Idle &&
+                        mZone[i, j].IsMinner)
+                        mZone[i, j].Image = getImage(2);
+                }
+            }
+
+            mZone[x, y].Image = getImage(3);
+        }
+        
+    }
+
+
+
+   public  enum MinnerStatus  {Idle,Opened,Flaged,Asked} //状态枚举：埋伏、打开、标为雷、标问号     
+
+
+    class  Minner:Button {
+        private int x, y;     //所在逻辑位置   
+        private bool isMinner;//自己是否是雷
+        private int count;    //周围9格雷的数目
+        private MinnerStatus ms;//雷的状态       
+        
